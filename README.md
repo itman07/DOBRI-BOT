@@ -4,7 +4,6 @@
 [![aiohttp](https://img.shields.io/badge/aiohttp-Async%20HTTP-brightgreen.svg)](https://docs.aiohttp.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Telegram Bot](https://img.shields.io/badge/MAX-Bot-blue.svg)](https://core.telegram.org/bots/api)
-[![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 **DOBRI-BOT** — это умный помощник для национального мессенджера MAX, который соединяет приюты животных, будущих хозяев и волонтеров. Наша миссия — помочь каждому бездомному животному в России найти любящую семью и обеспечить приюты необходимой поддержкой.
 
@@ -36,20 +35,29 @@
 
 ### Установка и запуск
 
-вставьте в string_token.py токен бота
-
 ```bash
 # Клонируйте репозиторий
 git clone https://github.com/itman07/DOBRI-BOT
 cd DOBRI-BOT
+```
+
+## Docker
+```bash
+docker build \
+  --build-arg BOT_TOKEN={your bot token}
+  -t my-app .
+```
+
+## Без Docker
+
+Вставьте в string_token.py токен бота
 
 # Установите зависимости
+```bash
 pip install -r requirements.txt
-
-# Настройте окружение
-cp .env.example .env
-# Отредактируйте .env файл, добавив ваш TELEGRAM_BOT_TOKEN и настройки БД
+```
 
 # Запустите бота
+```bash
 python -m main.py
 ```
