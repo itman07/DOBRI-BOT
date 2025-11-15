@@ -1,0 +1,7 @@
+logging
+asyncio
+aiohttp
+colorama
+pytest
+pytest-asyncio
+pytest-mock

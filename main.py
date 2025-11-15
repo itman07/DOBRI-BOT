@@ -124,7 +124,7 @@ async def volunteer_search_hanlder(update: Update, bot: Bot, stateManager: State
 async def shelter_search_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     if update.callback_query.payload.split(":")[1] == "_":
 
-        location: str = await stateManager.get_data(update.callback_query.message.chat_id, "city")
+        location: str = await stateManager.get_data(update.callback_query.message.chat_id, "location")
         shelters: list[Shelter] = await get_shelters_by_location(session, location.lower())
 
         await stateManager.set_data(update.callback_query.message.chat_id, "shelters",
