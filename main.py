@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass
 import logging
+import os
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,7 +19,7 @@ from string_token import token_str
 
 configure_logging(level=logging.DEBUG)
 
-bot = Bot(token_str)
+bot = Bot(token_str if token_str else os.environ.get('BOT_TOKEN'))
 dp = Dispatcher(bot)
 city = State()
 volunteer_city = State()
