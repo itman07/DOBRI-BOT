@@ -27,7 +27,7 @@ shelters = State()
 search = State()
 warn = State()
 
-moderators: list[int] = []
+moderators: list[int] = [3502432, 6070005, 8513914]
 
 
 @dataclass
@@ -76,7 +76,13 @@ async def start(update: Update, bot: Bot, stateManager: StateManager, session):
     await bot.send_message(chat_id=update.chat_id, text=
     "Вас приветствует ДОБРИ БОТ! Я умею:\n\n" \
     "- Помогать в поиске питомца из приюта.\n" \
-    "- Связывать волонтёров с приютами.")
+    "- Связывать волонтёров с приютами.\n"\
+    "Команды:\n" \
+    "/start - регистрация.\n" \
+    "/shelter - управление приютом.\n" \
+    "/add - добавление животного.\n" \
+    "/search - подбор животного.\n" \
+    "/pets - настройка животных.")
 
     await bot.send_message(chat_id=update.chat_id,
                            text="Для чего вы здесь?",
