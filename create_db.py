@@ -10,9 +10,9 @@ async def create_tables(engine: AsyncEngine) -> None:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def create_user(db: AsyncSession, max_id: int, location: str):
+async def create_user(db: AsyncSession, max_id: int, location: str, url: str):
     """Создание нового пользователя"""
-    db_user = User(max_id=max_id, location=location.lower())
+    db_user = User(max_id=max_id, location=location.lower(), url=url)
     db.add(db_user)
     await db.commit()
     await db.refresh(db_user)
@@ -33,7 +33,7 @@ async def get_user_by_max_id(db: AsyncSession, max_id: int):
     return user
 
 
-async def update_user(db: AsyncSession, user_id: int, max_id: int = None, location: str = None):
+async def update_user(db: AsyncSession, user_id: int, max_id: int = None, location: str = None, url: str = None):
     """Обновление пользователя"""
     user = await get_user_by_id(db, user_id)
     if not user:
@@ -43,6 +43,8 @@ async def update_user(db: AsyncSession, user_id: int, max_id: int = None, locati
         user.max_id = max_id
     if location is not None:
         user.location = location.lower()
+    if url is not None:
+        user.url = url
 
     await db.commit()
     await db.refresh(user)
@@ -135,7 +137,7 @@ async def delete_pet_by_id(db: AsyncSession, pet_id: int) -> bool:
 
 
 async def create_shelter(db: AsyncSession, max_id: int, name: str, address: str, location: str, get_messages: bool = 0,
-                         verified: int = False, description: str = None, dobro_rf: str = None):
+                         verified: int = False, description: str = None, dobro_rf: str = None, contact_url: str = None):
     """Создание нового приюта"""
 
     args = {}
@@ -143,6 +145,8 @@ async def create_shelter(db: AsyncSession, max_id: int, name: str, address: str,
         args["description"] = description
     if dobro_rf is not None:
         args["dobro_rf"] = dobro_rf
+    if contact_url is not None:
+        args["contact_url"] = contact_url
 
     db_shelter = Shelter(max_id=max_id, get_messages=get_messages, address=address, verified=verified,
                          name=name, location=location.lower(), **args)
@@ -183,7 +187,7 @@ async def get_shelters_without_verification(db: AsyncSession) -> list[Shelter]:
 
 async def update_shelter(db: AsyncSession, sql_id: int, get_messages: bool = None, verified: int = None,
                          max_id: int = None, name: str = None, address: str = None, location: str = None,
-                         description: str = None, dobro_rf: str = None):
+                         description: str = None, dobro_rf: str = None, contact_url: str = None):
     """Обновление приюта"""
     shelter = await get_shelter_by_id(db, sql_id)
     if not shelter:
@@ -205,6 +209,8 @@ async def update_shelter(db: AsyncSession, sql_id: int, get_messages: bool = Non
         shelter.description = description
     if dobro_rf is not None:
         shelter.dobro_rf = dobro_rf
+    if contact_url is not None:
+        shelter.contact_url = contact_url
 
     await db.commit()
     await db.refresh(shelter)

@@ -35,6 +35,7 @@ class Shelter(Base):
 
     description: Mapped[Optional[str]] = mapped_column(String(1024))
     dobro_rf: Mapped[Optional[str]] = mapped_column(String(256))
+    contact_url: Mapped[Optional[str]] = mapped_column(String(512))
 
     def __repr__(self):
         return (f"<Shelter(id={self.id}, verified={self.verified}, name={self.name}, adress={self.address},"
@@ -66,6 +67,8 @@ class User(Base):
     max_id: Mapped[int] = mapped_column(unique=True)
 
     location: Mapped[str] = mapped_column(String(64))
+
+    url: Mapped[str] = mapped_column(String(512))
 
     def __str__(self):
         return f"Ползователь {self.username} в городе {self.location} с макс айди {self.max_id} под номером {self.id}"

@@ -22,10 +22,13 @@ configure_logging(level=logging.DEBUG)
 bot = Bot(token_str if token_str else os.getenv('BOT_TOKEN'))
 dp = Dispatcher(bot)
 city = State()
+user_url = State()
 volunteer_city = State()
 shelters = State()
 search = State()
 warn = State()
+moderation = State()
+pets_state = State()
 
 moderators: list[int] = [3502432, 6070005, 8513914]
 
@@ -38,6 +41,7 @@ class ShelterRegistration:
     description = State()
     get_messages = State()
     location = State()
+    contact_url = State()
 
 
 @dataclass
@@ -47,6 +51,7 @@ class ShelterChange:
     url = State()
     description = State()
     get_messages = State()
+    contact_url = State()
 
 
 @dataclass
@@ -82,7 +87,8 @@ async def start(update: Update, bot: Bot, stateManager: StateManager, session):
     "/shelter - управление приютом.\n" \
     "/add - добавление животного.\n" \
     "/search - подбор животного.\n" \
-    "/pets - настройка животных.")
+    "/pets - настройка животных.\n" \
+    "/cancel - отмена.")
 
     await bot.send_message(chat_id=update.chat_id,
                            text="Для чего вы здесь?",
@@ -130,7 +136,7 @@ async def volunteer_search_hanlder(update: Update, bot: Bot, stateManager: State
 async def shelter_search_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     if update.callback_query.payload.split(":")[1] == "_":
 
-        location: str = await stateManager.get_data(update.callback_query.message.chat_id, "location")
+        location: str = await stateManager.get_data(update.callback_query.message.chat_id, "city")
         shelters: list[Shelter] = await get_shelters_by_location(session, location.lower())
 
         await stateManager.set_data(update.callback_query.message.chat_id, "shelters",
@@ -165,7 +171,7 @@ async def shelter_search_handler(update: Update, bot: Bot, stateManager: StateMa
     await bot.answer_callback(
         update.callback_query.callback_id,
         f"Приют {shelter.name}, {shelter.address}\n" \
-        f"{shelter.description}",
+        f"{shelter.description if shelter.description else ""}",
         [InlineKeyboardMarkup([[InlineKeyboardButton("Откликнуться", f"shelter_search:like:{shelter.id}"),
                                 InlineKeyboardButton("Дальше", f"shelter_search:next:{shelter.id}")]]).to_dict()])
     await stateManager.set_data(update.callback_query.message.chat_id, "shelters_index", shelter_index + 1)
@@ -244,9 +250,9 @@ async def shelter_skip_description_handler(update: Update, bot: Bot, stateManage
     await bot.answer_callback(update.callback_query.callback_id, notification="Описание пропущено.")
     await bot.send_message(chat_id=update.callback_query.message.chat_id,
                            text="Давать ли ссылку на ваш аккаунт в MAX человеку, который захочет забрать животное?",
-                           attachments=[InlineKeyboardMarkup([[InlineKeyboardButton("Нет", "get_messages:no"),
+                           attachments=[InlineKeyboardMarkup([[InlineKeyboardButton("Нет", "get_messages:0"),
                                                                InlineKeyboardButton("Да",
-                                                                                    "get_messages:yes")]]).to_dict()])
+                                                                                    "get_messages:1")]]).to_dict()])
     await stateManager.set_state(update.callback_query.message.chat_id, ShelterRegistration.get_messages)
 
 
@@ -261,29 +267,41 @@ async def shelter_get_messages_handler(update: Update, bot: Bot, stateManager: S
     await stateManager.set_state(update.chat_id, ShelterRegistration.get_messages)
 
 
-async def get_messages_callback(update: Update):
-    return update.callback_query.payload.split(":")[0] == "get_messages"
+async def get_messages1_callback(update: Update):
+    return update.callback_query.payload == "get_messages:1"
 
 
-@dp.callback_query_handler(get_messages_callback)
+async def get_messages0_callback(update: Update):
+    return update.callback_query.payload == "get_messages:0"
+
+@dp.callback_query_handler(get_messages1_callback)
+async def add_contact_url_handler(update: Update, bot: Bot, stateManager: StateManager, session):
+    await bot.send_message(chat_id=update.callback_query.message.chat_id, text="Отправьте вашу пригласительную ссылку, которую можно получить, отсканировав ваш пригласительный QR-код (вкладка профиль, верхний левый угол).")
+    await stateManager.set_state(update.callback_query.message.chat_id, ShelterRegistration.contact_url)
+
+@dp.message_handler(StateFilter(ShelterRegistration.contact_url))
+@dp.callback_query_handler(get_messages0_callback)
 async def shelter_finish_reg_handler(update: Update, bot: Bot, stateManager: StateManager, session):
-    await bot.answer_callback(update.callback_query.callback_id, notification="Ваш ответ учтён.")
+    update.chat_id = update.message.chat_id if update.message else update.callback_query.message.chat_id
+    user_id: int = update.message.from_user.user_id if update.message else update.callback_query.from_user.user_id
+    await bot.answer_callback(update.chat_id, notification="Ваш ответ учтён.")
 
-    shelter = await stateManager.get_all_data(update.callback_query.message.chat_id)
-    get_messages = 1 if ("yes" == update.callback_query.payload.split(":")[1]) else 0
+    shelter = await stateManager.get_all_data(update.chat_id)
+    get_messages = 1 if update.message else 0
     data = {"name": shelter["name"], "location": shelter["location"], "address": shelter["address"],
             "get_messages": get_messages,
-            "verified": 0}
+            "verified": 0,
+            "contact_url": update.message.text if update.message else None}
     if "url" in shelter.keys():
         data["dobro_rf"] = shelter["url"]
     if "description" in shelter.keys():
         data["description"] = shelter["description"]
 
-    await create_shelter(session, update.callback_query.from_user.user_id, **data)
+    await create_shelter(session, user_id, **data)
 
-    await bot.send_message(chat_id=update.callback_query.message.chat_id,
+    await bot.send_message(chat_id=update.chat_id,
                            text="Приют успешно зарегистрирован! Вы сможете добавить животных с помощью команды /add, когда ваш приют будет верифицирован модераторами. Вам придёт уведомление.")
-    await stateManager.erase_state(update.callback_query.message.chat_id)
+    await stateManager.erase_state(update.chat_id)
 
 
 @dp.callback_query_handler(new_user_callback)
@@ -295,9 +313,16 @@ async def new_user_handler(update: Update, bot: Bot, stateManager: StateManager,
                            text="Назовите город, в котором вы сейчас.")
     await stateManager.set_state(update.callback_query.message.chat_id, city)
 
+@dp.message_handler(StateFilter(city))
+async def user_url_handler(update: Update, bot: Bot, stateManager: StateManager, session):
+    await stateManager.set_data(update.message.chat_id, "city", update.message.text)
+    await bot.send_message(chat_id=update.message.chat_id,
+                           text="Отправьте вашу пригласительную ссылку, которую можно получить, отсканировав ваш пригласительный QR-код (вкладка профиль, верхний левый угол).")
+    await stateManager.set_state(update.message.chat_id, user_url)
+
 
 @dp.message_handler(Command("search"))
-@dp.message_handler(StateFilter(city))
+@dp.message_handler(StateFilter(user_url))
 async def city_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     user: User = await get_user_by_max_id(session, update.message.from_user.user_id)
     if user is None:
@@ -306,15 +331,15 @@ async def city_handler(update: Update, bot: Bot, stateManager: StateManager, ses
                                    text="Вы ещё не зарегистрированы как пользователь. Зарегистрируйтесь по команде /start .")
             await stateManager.erase_state(update.message.chat_id)
             return
+        user: User = await create_user(session, max_id=update.message.from_user.user_id,
+                          location=(await stateManager.get_data(update.message.chat_id, "city")), url=update.message.text)
         await stateManager.set_data(update.message.chat_id, "city",
-                                    update.message.text)
-        await create_user(session, max_id=update.message.from_user.user_id,
-                          location=update.message.text)
+                                    user.location)
     else:
         if update.message.text != "/search":
             await stateManager.set_data(update.message.chat_id, "city",
-                                        update.message.text)
-            await update_user(session, user.id, location=update.message.text)
+                                        user.location)
+            await update_user(session, user.id, location=(await stateManager.get_data(update.message.chat_id, "city")), url=update.message.text)
         else:
             await stateManager.set_data(update.message.chat_id, "city",
                                         user.location)
@@ -367,14 +392,11 @@ async def search_callback_handler(update: Update, bot: Bot, stateManager: StateM
 
         pet: Pet = await get_pet_by_id(session, int(update.callback_query.payload.split(":")[3]))
         shelter: Shelter = await get_shelter_by_id(session, pet.shelter_id)
+        user: User = await get_user_by_max_id(session, update.callback_query.from_user.user_id)
         await bot.send_message(user_id=shelter.max_id,
-                               text=f"Пользователь по ссылке https://max.ru/{update.callback_query.from_user.user_id} заинтересовался {pet.name}.\n\nЯ отправил ему ваш адрес и контакт.\nНажмите принять, чтобы отправить согласие на посещение, или проигнорируйте, если вы не согласны.",
+                               text=f"Пользователь по ссылке {user.url} заинтересовался {pet.name}.\n\nЯ отправил ему ваш адрес{" и контакт" if shelter.get_messages else ""}.\nНажмите принять, чтобы отправить согласие на посещение, или проигнорируйте, если вы не согласны.",
                                attachments=[InlineKeyboardMarkup([[InlineKeyboardButton("принять",
                                                                                         f"accept:{update.callback_query.from_user.user_id}:{pet.id}")]]).to_dict()])
-        await bot.send_message(
-            chat_id=update.callback_query.message.chat_id,
-            text=f"Вы можете встретиться с вашим будущим лучшим другом по адресу:\n{shelter.address}\n\nМы оповестили приют о вашей заинтересованности. Ссылка на ваш профиль была отправлена ему.{f"\n\nТакже, вы можете сами связаться с приютом по ссылке: https://max.ru/{shelter.max_id}" if shelter.get_messages else ""}"
-        )
     pets: list[Pet] = await stateManager.get_data(update.callback_query.message.chat_id, "pets")
     pets_index: int = await stateManager.get_data(update.callback_query.message.chat_id, "pets_index")
 
@@ -401,7 +423,7 @@ async def search_callback_handler(update: Update, bot: Bot, stateManager: StateM
         await bot.answer_callback(
             update.callback_query.callback_id,
             f"{animal_types[pet.type]} {"Девочка" if not pet.gender else "Мальчик"} {pet.name}, {pet.age} - {pet.location}, приют {(await get_shelter_by_id(session, pet.shelter_id)).name}\n" \
-            f"{pet.description}",
+            f"{pet.description if pet.description else ""}",
             [{"type": "image", "payload": {"token": pet.token}} for pet in (await get_photos_by_pet_id(session, pet.id))] + [
                 InlineKeyboardMarkup([[InlineKeyboardButton("Лайк", f"search:like:{search_type}:{pet.id}"),
                                        InlineKeyboardButton("Дальше",
@@ -422,7 +444,7 @@ async def accept_handler(update: Update, bot: Bot, stateManager: StateManager, s
     shelter: Shelter = await get_shelter_by_max_id(session, update.callback_query.from_user.user_id)
     pet: Pet = await get_pet_by_id(session, int(update.callback_query.payload.split(":")[2]))
     await bot.send_message(user_id=int(update.callback_query.payload.split(":")[1]),
-                           text=f"Вы можете встретиться с вашим будущим лучшим другом {pet.name} по адресу:\n{shelter.address}\n\nМы оповестили приют о вашей заинтересованности. Ссылка на ваш профиль была отправлена ему.{f"\n\nТакже, вы можете сами связаться с приютом по ссылке: https://max.ru/{shelter.max_id}" if shelter.get_messages else ""}"
+                           text=f"Вы можете встретиться с вашим будущим лучшим другом {pet.name} по адресу:\n{shelter.address}\n\nМы оповестили приют о вашей заинтересованности. Ссылка на ваш профиль была отправлена ему.{f"\n\nТакже, вы можете сами связаться с приютом по ссылке: {shelter.contact_url}" if shelter.get_messages else ""}"
                            )
 
 
@@ -433,11 +455,12 @@ async def start_moderation_handler(update: Update, bot: Bot, stateManager: State
                                text="Ваш статус модератора подтверждён. Приступаем к модерации?",
                                attachments=[InlineKeyboardMarkup([[InlineKeyboardButton("Поехали",
                                                                                         f"moderation-{update.message.from_user.user_id}:_")]]).to_dict()])
+        await stateManager.set_state(update.message.chat_id, moderation)
 
 
 async def moderation_callback(update: Update):
     return (update.callback_query.payload.split(":")[0].split("-")[0] == "moderation") and (
-            update.callback_query.payload.split(":")[0].split("-")[1] in moderators)
+            int(update.callback_query.payload.split(":")[0].split("-")[1]) in moderators)
 
 
 @dp.callback_query_handler(moderation_callback)
@@ -445,13 +468,14 @@ async def moderaion_handler(update: Update, bot: Bot, stateManager: StateManager
     if update.callback_query.payload.split(":")[1] == "_":
         shelters: list[Shelter] = await get_shelters_without_verification(session)
         await stateManager.set_data(update.callback_query.message.chat_id, "shelters",
-                                    [s for s in shelters if s.verified == 1 and (s.dobro_rf or s.get_messages)])
+                                    [s for s in shelters if s.verified == 0 and (s.dobro_rf or s.get_messages)])
         await stateManager.set_data(update.callback_query.message.chat_id, "shelters_index", 0)
     elif update.callback_query.payload.split(":")[1] == "like":
         shelter: Shelter = await get_shelter_by_id(session, int(update.callback_query.payload.split(":")[2]))
         await update_shelter(session, shelter.id, verified=1)
         await bot.send_message(chat_id=update.callback_query.message.chat_id,
                                text="Приют верифицирован.")
+        await bot.send_message(user_id=shelter.max_id, text="Ваш приют верифицирован.")
 
     shelters: list[Shelter] = await stateManager.get_data(update.callback_query.message.chat_id, "shelters")
     shelters_index: int = await stateManager.get_data(update.callback_query.message.chat_id, "shelters_index")
@@ -462,7 +486,7 @@ async def moderaion_handler(update: Update, bot: Bot, stateManager: StateManager
         await bot.answer_callback(
             update.callback_query.callback_id,
             f"Приют {shelter.name}, {shelter.address}\n" \
-            f"{shelter.description}\n{f"url: {shelter.dobro_rf}" if shelter.dobro_rf else ""}",
+            f"{shelter.description if shelter.description else ""}\n{f"url: {shelter.dobro_rf}" if shelter.dobro_rf else ""}",
             [InlineKeyboardMarkup([[InlineKeyboardButton("Одобрить", f"moderation-{moderator_id}:like:{shelter.id}"),
                                     InlineKeyboardButton("Отправить замечание", f"warn:{shelter.id}")]]).to_dict()])
     else:
@@ -498,9 +522,9 @@ async def send_warn_handler(update: Update, bot: Bot, stateManager: StateManager
 
 @dp.message_handler(Command("shelter"))
 async def shelter_settings_handler(update: Update, bot: Bot, stateManager: StateManager, session):
-    shelter = get_shelter_by_max_id(session, update.message.from_user.user_id)
+    shelter = await get_shelter_by_max_id(session, update.message.from_user.user_id)
     if shelter is None:
-        await bot.send_message(chat_id=update.callback_query.message.chat_id,
+        await bot.send_message(chat_id=update.message.chat_id,
                                text="Вы не зарегистрированы в качестве приюта. Чтобы зарегистрироваться, введите /start .")
     else:
         await bot.send_message(chat_id=update.message.chat_id,
@@ -532,21 +556,21 @@ async def shelter_change_handler(update: Update, bot: Bot, stateManager: StateMa
                                    text="Отправьте новое описание приюта. Если вы хотите оставить его пустым, нажмите пусто.",
                                    attachments=[InlineKeyboardMarkup(
                                        [[InlineKeyboardButton("Пусто", "desc-change")]]).to_dict()])
-            await stateManager.set_state(ShelterChange.description)
+            await stateManager.set_state(update.callback_query.message.chat_id, ShelterChange.description)
         case "name":
             await bot.send_message(chat_id=update.callback_query.message.chat_id,
                                    text="Отправьте новое название приюта.")
-            await stateManager.set_state(ShelterChange.name)
+            await stateManager.set_state(update.callback_query.message.chat_id, ShelterChange.name)
         case "address":
             await bot.send_message(chat_id=update.callback_query.message.chat_id,
                                    text="Отправьте новый адрес приюта.")
-            await stateManager.set_state(ShelterChange.address)
+            await stateManager.set_state(update.callback_query.message.chat_id, ShelterChange.address)
         case "url":
             await bot.send_message(chat_id=update.callback_query.message.chat_id,
                                    text="Отправьте новую ссылку на страницу приюта на dobro.ru . Если страницы нет, нажмите пусто.",
                                    attachments=[
                                        InlineKeyboardMarkup([[InlineKeyboardButton("Пусто", "url-change")]]).to_dict()])
-            await stateManager.set_state(ShelterChange.url)
+            await stateManager.set_state(update.callback_query.message.chat_id, ShelterChange.url)
         case "get_messages":
             await bot.send_message(chat_id=update.callback_query.message.chat_id,
                                    text="Давать ли ссылку на ваш аккаунт в MAX человеку, который захочет забрать животное?",
@@ -554,14 +578,14 @@ async def shelter_change_handler(update: Update, bot: Bot, stateManager: StateMa
                                                                                             "get_messages-change:0"),
                                                                        InlineKeyboardButton("Да",
                                                                                             "get_messages-change:1")]]).to_dict()])
-            await stateManager.set_state(ShelterChange.get_messages)
+            await stateManager.set_state(update.callback_query.message.chat_id, ShelterChange.get_messages)
 
         case "delete":
-            shelter = await get_shelter_by_id(session, update.callback_query.from_user.user_id)
+            shelter = await get_shelter_by_max_id(session, update.callback_query.from_user.user_id)
             await delete_shelter_by_max_id(session, shelter.max_id)
 
         case "verification":
-            shelter = await get_shelter_by_id(session, update.callback_query.from_user.user_id)
+            shelter = await get_shelter_by_max_id(session, update.callback_query.from_user.user_id)
             shelter_verification = shelter.verified
             if shelter_verification:
                 await bot.send_message(chat_id=update.callback_query.message.chat_id,
@@ -578,7 +602,7 @@ async def shelter_change_handler(update: Update, bot: Bot, stateManager: StateMa
 async def change_shelter_name_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     shelter = await get_shelter_by_max_id(session, update.message.from_user.user_id)
     if shelter is not None:
-        name = (await stateManager.get_all_data(update.message.chat_id))["name"]
+        name = update.message.text
         await update_shelter(session, shelter.id, verified=0, name=name)
 
     await bot.send_message(chat_id=update.message.chat_id,
@@ -590,7 +614,7 @@ async def change_shelter_name_handler(update: Update, bot: Bot, stateManager: St
 async def change_shelter_address_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     shelter = await get_shelter_by_max_id(session, update.message.from_user.user_id)
     if shelter is not None:
-        address = (await stateManager.get_all_data(update.message.chat_id))["address"]
+        address = update.message.text
         await update_shelter(session, shelter.id, verified=0, address=address)
 
     await bot.send_message(chat_id=update.message.chat_id,
@@ -632,7 +656,7 @@ async def url_null_handler(update: Update, bot: Bot, stateManager: StateManager,
 async def desc_null_st_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     shelter = await get_shelter_by_max_id(session, update.message.from_user.user_id)
     if shelter is not None:
-        description = (await stateManager.get_all_data(update.message.chat_id))["description"]
+        description = update.message.text
         await update_shelter(session, shelter.id, description=description, verified=0)
     await bot.send_message(chat_id=update.message.chat_id,
                            text="Описание изменено.")
@@ -646,8 +670,7 @@ async def url_null_st_handler(update: Update, bot: Bot, stateManager: StateManag
         await bot.send_message(chat_id=update.message.chat_id,
                                text="Вы не зарегистрированы в качестве приюта. Чтобы зарегистрироваться, введите /start .")
     else:
-        shelter = await stateManager.get_all_data(update.message.chat_id)
-        await update_shelter(session, update.message.from_user.user_id, verified=0, dobro_rf=shelter["url"])
+        await update_shelter(session, update.message.from_user.user_id, verified=0, dobro_rf=update.message.text)
 
         await bot.send_message(chat_id=update.message.chat_id,
                                text="Ссылка на страницу изменена.")
@@ -662,15 +685,34 @@ async def change_get_messages_callback(update: Update):
 async def get_messages_change_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     get_messages: int = int(update.callback_query.payload.split(":")[1])
 
+
     shelter = await get_shelter_by_max_id(session, update.callback_query.from_user.user_id)
     if shelter is not None:
         shelter_id = shelter.id
-        await update_shelter(session, shelter_id, get_messages=bool(get_messages))
+        if get_messages:
+            await bot.send_message(chat_id=update.callback_query.message.chat_id, text="Отправьте вашу пригласительную ссылку, которую можно получить, отсканировав ваш пригласительный QR-код (вкладка профиль, верхний левый угол).")
+            await stateManager.set_state(update.callback_query.message.chat_id, ShelterChange.contact_url)
+        else:
+            await update_shelter(session, shelter_id, get_messages=get_messages)
+            await stateManager.erase_state(update.callback_query.message.chat_id)
     else:
         await bot.send_message(chat_id=update.callback_query.message.chat_id,
                                text="Вы не зарегистрированы в качестве приюта. Чтобы зарегистрироваться, введите /start .")
+        await stateManager.erase_state(update.callback_query.message.chat_id)
+    
 
-    await stateManager.erase_state(update.callback_query.message.chat_id)
+
+@dp.message_handler(StateFilter(ShelterChange.contact_url))
+async def shelter_contact_url_update_handler(update: Update, bot: Bot, stateManager: StateManager, session):
+    shelter = await get_shelter_by_max_id(session, update.message.from_user.user_id)
+    if shelter is not None:
+        shelter_id = shelter.id
+        await update_shelter(session, shelter_id, get_messages=1, contact_url=update.message.text)
+        await bot.send_message(chat_id=update.message.chat_id, text="Статус отправки контакта изменён.")
+    else:
+        await bot.send_message(chat_id=update.message.chat_id,
+                               text="Вы не зарегистрированы в качестве приюта. Чтобы зарегистрироваться, введите /start .")
+    await stateManager.erase_state(update.message.chat_id)
 
 
 async def add_pet_callback(update: Update):
@@ -681,12 +723,18 @@ async def add_pet_callback(update: Update):
 @dp.callback_query_handler(add_pet_callback)
 async def add_pet_handler(update: Update, bot: Bot, stateManager: StateManager, session):
     update.chat_id = update.message.chat_id if update.message else update.callback_query.message.chat_id
-    await bot.send_message(chat_id=update.chat_id,
-                           text="Выберите тип животного.",
-                           attachments=[InlineKeyboardMarkup(
-                               [[InlineKeyboardButton("Собака", "pet:dog"), InlineKeyboardButton("Кошка", "pet:cat")],
-                                [InlineKeyboardButton("Другой", "pet:other")]]).to_dict()])
-    await stateManager.set_state(update.chat_id, AnimalRegistration._type)
+    user_id: int = update.message.from_user.user_id if update.message else update.callback_query.from_user.user_id
+    shelter = await get_shelter_by_max_id(session, user_id)
+    if shelter is None:
+        await bot.send_message(chat_id=update.chat_id,
+                               text="Вы не зарегистрированы в качестве приюта. Чтобы зарегистрироваться, введите /start .")
+    else:
+        await bot.send_message(chat_id=update.chat_id,
+                            text="Выберите тип животного.",
+                            attachments=[InlineKeyboardMarkup(
+                                [[InlineKeyboardButton("Собака", "pet:dog"), InlineKeyboardButton("Кошка", "pet:cat")],
+                                    [InlineKeyboardButton("Другой", "pet:other")]]).to_dict()])
+        await stateManager.set_state(update.chat_id, AnimalRegistration._type)
 
 
 async def add_pet_type_callback(update: Update):
@@ -773,8 +821,8 @@ async def add_media_handler(update: Update, bot: Bot, stateManager: StateManager
         data = {"name": pet["pet_name"], "age": pet["pet_age"], "gender": bool(int(pet["pet_gender"])),
                 "pet_type": pet["pet_type"]}
         location = (await get_shelter_by_max_id(session, update.message.from_user.user_id)).location
-        if "description" in pet.keys():
-            data["description"] = pet["description"]
+        if "pet_description" in pet.keys():
+            data["description"] = pet["pet_description"]
 
         pet_id = (await create_pet(session, shelter_id=shelter_id, location=location, **data)).id
 
@@ -802,8 +850,8 @@ async def add_none_media_handler(update: Update, bot: Bot, stateManager: StateMa
         data = {"name": pet["pet_name"], "age": pet["pet_age"], "gender": bool(int(pet["pet_gender"])),
                 "pet_type": pet["pet_type"]}
         location = (await get_shelter_by_max_id(session, update.callback_query.from_user.user_id)).location
-        if "description" in pet.keys():
-            data["description"] = pet["description"]
+        if "pet_description" in pet.keys():
+            data["description"] = pet["pet_description"]
 
         await create_pet(session, shelter_id=shelter_id, location=location, **data)
 
@@ -818,7 +866,8 @@ async def pets_handler(update: Update, bot: Bot, stateManager: StateManager, ses
     if shelter is not None:
         if shelter.verified == 1:
             pets: list[Pet] = await get_pets_by_shelter_id(session, shelter.id)
-
+            if not (await stateManager.get_state(update.message.chat_id)):
+                await stateManager.set_state(update.message.chat_id, pets_state)
             await stateManager.set_data(update.message.chat_id, "pets", pets)
             await stateManager.set_data(update.message.chat_id, "pets_index", 0)
             await bot.send_message(chat_id=update.message.chat_id,
@@ -847,7 +896,11 @@ async def pets_change_handler(update: Update, bot: Bot, stateManager: StateManag
         pets: list[Pet] = await stateManager.get_data(update.callback_query.message.chat_id, "pets")
         if pets_index < len(pets):
             pet: Pet = pets[pets_index]
-
+            animal_types: dict[str, str] = {
+                "dog": "Собака",
+                "cat": "Кошка",
+                "other": "Животное"
+            }
             # anketa = {"id": 123,
             #           "gender": 0,
             #           "animal": "Cобака",
@@ -860,8 +913,8 @@ async def pets_change_handler(update: Update, bot: Bot, stateManager: StateManag
 
             await bot.answer_callback(
                 callback_id=update.callback_query.callback_id,
-                text=f"{pet.type} {"Девочка" if not pet.gender else "Мальчик"} {pet.name}, {pet.age} - {pet.location}, приют {(await get_shelter_by_id(session, pet.shelter_id)).name}\n" \
-                     f"{pet.description}",
+                text=f"{animal_types[pet.type]} {"Девочка" if not pet.gender else "Мальчик"} {pet.name}, {pet.age} - {pet.location}, приют {(await get_shelter_by_id(session, pet.shelter_id)).name}\n" \
+                     f"{pet.description if pet.description else ""}",
                 attachments=[{"type": "image", "payload": {"token": pet.token}} for pet in
                              (await get_photos_by_pet_id(session, pet.id))] + [InlineKeyboardMarkup([
                     [InlineKeyboardButton("Следующее животное", "pet_change_next")],
@@ -1053,6 +1106,10 @@ async def pet_change_media_handler(update: Update, bot: Bot, stateManager: State
                            text="Фотографии изменены.")
     await stateManager.erase_state(update.callback_query.message.chat_id)
 
+@dp.message_handler(Command("cancel"))
+async def cancel_handler(update: Update, bot: Bot, stateManager: StateManager, session):
+    await stateManager.erase_state(update.message.chat_id)
+    await bot.send_message(chat_id=update.message.chat_id, text="Все действия отменены.")
 
 async def main():
     session = await create_db()
