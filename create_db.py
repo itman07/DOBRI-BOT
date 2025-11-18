@@ -254,7 +254,7 @@ async def delete_photo_by_token(db: AsyncSession, token: str) -> bool:
 
 
 async def create_db() -> int:
-    db_url = 'sqlite+aiosqlite:///db/database.db'
+    db_url = 'sqlite+aiosqlite:///database.db'
     tracemalloc.start()
     engine: AsyncEngine = create_async_engine(db_url, echo=True, future=True)
     async_session_local = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)

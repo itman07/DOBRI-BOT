@@ -29,11 +29,18 @@
 
 ### Предварительные требования
 
-- Python 3.14
+- Python 3.14 (при установке без docker)
 - MAX Bot Token
-- SQLite
+- AIOSQLite, SQLAlchemy, AIOhttp
 
 ### Установка и запуск
+
+# Docker
+```bash
+docker run -e BOT_TOKEN={ВАШ_ТОКЕН} themaximsuper/dobribot
+```
+
+# Без Docker
 
 ```bash
 # Клонируйте репозиторий
@@ -41,23 +48,15 @@ git clone https://github.com/itman07/DOBRI-BOT
 cd DOBRI-BOT
 ```
 
-## Docker
-```bash
-docker build \
-  --build-arg BOT_TOKEN={your bot token}
-  -t my-app .
-```
+Вставьте в string_token.py токен бота.
 
-## Без Docker
 
-Вставьте в string_token.py токен бота
-
-# Установите зависимости
+## Установите зависимости
 ```bash
 pip install -r requirements.txt
 ```
 
-# Запустите бота
+## Запустите бота
 ```bash
 python -m main.py
 ```

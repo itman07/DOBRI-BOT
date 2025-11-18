@@ -1,12 +1,11 @@
-ARG BOT_TOKEN
+FROM python:3.14.0-alpine3.21
 
-FROM ubuntu:latest
 WORKDIR /usr/src/app
 
-ENV BOT_TOKEN=${APP_VERSION}
+ENV BOT_TOKEN=""
 
 COPY . .
 
-CMD ["pip", "install", "-r", "requirements.txt"]
+RUN pip install --no-cache-dir -r requirements.txt
 
-CMD ["python", "./main.py"]
+CMD ["python", "main.py"]

@@ -19,7 +19,7 @@ from string_token import token_str
 
 configure_logging(level=logging.DEBUG)
 
-bot = Bot(token_str if token_str else os.environ.get('BOT_TOKEN'))
+bot = Bot(token_str if token_str else os.getenv('BOT_TOKEN'))
 dp = Dispatcher(bot)
 city = State()
 volunteer_city = State()
