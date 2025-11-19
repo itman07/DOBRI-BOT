@@ -35,7 +35,7 @@
 
 ### Установка и запуск
 
-# Docker
+# [Docker](https://hub.docker.com/repository/docker/themaximsuper/dobribot/general)
 ```bash
 docker run -e BOT_TOKEN={ВАШ_ТОКЕН} themaximsuper/dobribot
 ```
